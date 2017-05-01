@@ -28,6 +28,7 @@
  * SPI SCK     SCK          13 / ICSP-3   52        D13        ICSP-3           15
  */
 
+#include <Keypad.h>
 #include <TimerOnes.h>
 #include <SPI.h>
 #include <MFRC522.h>
@@ -37,13 +38,27 @@
 #define RST_PIN 9
 #define approveLED 5
 #define magnet 4
-#define doorAccess 2
-#define remoteAccess 3
+#define doorAccess 6
+#define remoteAccess 8
 #define rfidbuzzer 7
+
+const byte ROWS = 4; //four rows
+const byte COLS = 4; //four columns
+//define the cymbols on the buttons of the keypads
+char hexaKeys[ROWS][COLS] = {
+  {'1','2','3','A'},
+  {'4','5','6','B'},
+  {'7','8','9','C'},
+  {'*','0','#','D'}
+};
+byte rowPins[ROWS] = {A3, A2, A1, A0}; //connect to the row pinouts of the keypad
+byte colPins[COLS] = {3, 2, A5, A4}; //connect to the column pinouts of the keypad
 
 MFRC522 rfid(SS_PIN, RST_PIN); // Instance of the class
 
 MFRC522::MIFARE_Key key; 
+
+Keypad customKeypad = Keypad( makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS); 
 
 // Init array that will store new NUID 
 byte nuidPICC[4];
@@ -52,6 +67,9 @@ unsigned long cards[30];
 int numberOfCards;
 bool interruptFlag = 0;
 int address = 0;
+
+int i = 0;
+String numkey;
 
 void EEPROMWritelong(int address, long value);
 unsigned long EEPROMReadlong(int address);
@@ -104,6 +122,38 @@ void loop() {
     Serial.println(code);
     rfid.PICC_HaltA();
     rfid.PCD_StopCrypto1();
+    if(code == 176521362){
+      Serial.println("IN");
+      Timer1.attachInterrupt(registercallback);
+      Timer1.resume();  
+      while(1){
+        if(rfid.PICC_IsNewCardPresent()){
+          if(!rfid.PICC_ReadCardSerial())
+          return;
+          for (byte i = 0; i < 4; i++) {
+            nuidPICC[i] = rfid.uid.uidByte[i];
+          }
+          unsigned long code = printDec(rfid.uid.uidByte, rfid.uid.size);
+          if(code == 176521362){
+            Timer1.detachInterrupt();
+            break;
+          }
+          EEPROMWritelong(address, code); 
+          Serial.print("The card with code of ");
+          Serial.print(code);
+          Serial.print(" has been written to EEPROM address ");
+          Serial.println(address);
+          Timer1.detachInterrupt();
+          address += 4;
+          interruptFlag = 1;
+        }
+        if(interruptFlag){
+          interruptFlag = 0;
+          break;
+        }
+      }
+    }
+    
     for(int x = 0; x < numberOfCards; x++){
       if(code == cards[x]){
         digitalWrite(rfidbuzzer, LOW);
@@ -120,6 +170,43 @@ void loop() {
     doorOpen();
     delay(200);
     digitalWrite(rfidbuzzer, HIGH);
+  }
+  char customKey = customKeypad.getKey();
+  if(customKey){
+    numkey += customKey;
+    i++;
+    digitalWrite(rfidbuzzer, LOW);
+    delay(200);
+    digitalWrite(rfidbuzzer, HIGH);
+    while(i < 4){
+      char customKey = customKeypad.getKey();
+      if(customKey){
+        numkey += customKey;
+        i++;
+        digitalWrite(rfidbuzzer, LOW);
+        delay(200);
+        digitalWrite(rfidbuzzer, HIGH);
+      }
+    }
+    Serial.println(numkey);
+    if(numkey == "3860"){
+      delay(200);
+      digitalWrite(rfidbuzzer, LOW);
+      doorOpen();
+      delay(400);
+      digitalWrite(rfidbuzzer, HIGH);
+    }
+    else{
+      delay(200);
+      for(int z = 0; z<3;z++){
+        digitalWrite(rfidbuzzer, LOW);
+        delay(50);
+        digitalWrite(rfidbuzzer, HIGH);
+        delay(50);
+      }
+    }
+    i = 0;
+    numkey = "";
   }
   delay(100);
 }
