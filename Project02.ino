@@ -106,16 +106,20 @@ void loop() {
     rfid.PCD_StopCrypto1();
     for(int x = 0; x < numberOfCards; x++){
       if(code == cards[x]){
+        digitalWrite(rfidbuzzer, LOW);
         Serial.println("Access Granted");
         doorOpen();
         delay(200);
+        digitalWrite(rfidbuzzer, HIGH);
         break;
       }
     }
   }
-  if(!(digitalRead(doorAccess)||digitalRead(remoteAccess))){
+  if(!(digitalRead(doorAccess))){
+    digitalWrite(rfidbuzzer, LOW);
     doorOpen();
     delay(200);
+    digitalWrite(rfidbuzzer, HIGH);
   }
   delay(100);
 }
